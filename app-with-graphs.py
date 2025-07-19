@@ -127,51 +127,126 @@ def create_dashboard_plot(df, troubles):
         
         # 2. DV Wave Graph
         if len(df) > 0:
-            # Sample data for visualization
-            sample_size = min(200, len(df))
-            sample_df = df.sample(n=sample_size, random_state=42).sort_values('Timestamp')
+            # Sample data for visualization - use more recent data
+            sample_size = min(300, len(df))
+            sample_df = df.tail(sample_size).sort_values('Timestamp')
             
-            timestamps = sample_df['Timestamp']
-            dv_values = sample_df['DV']
+            # Create proper time indices for x-axis
+            time_indices = range(len(sample_df))
+            dv_values = sample_df['DV'].values
             
-            ax2.plot(timestamps, dv_values, color=colors['primary'], 
-                    label='DV Values', linewidth=2, alpha=0.9)
+            # Create a more visually appealing plot
+            ax2.plot(time_indices, dv_values, color=colors['primary'], 
+                    label='DV Values', linewidth=2.5, alpha=0.8, marker='o', markersize=3)
             
-            # Highlight trouble points
+            # Add trend line for better visualization
+            z = np.polyfit(time_indices, dv_values, 1)
+            p = np.poly1d(z)
+            ax2.plot(time_indices, p(time_indices), color=colors['success'], 
+                    linestyle='--', linewidth=2, alpha=0.6, label='Trend Line')
+            
+            # Highlight trouble points with better styling
             if len(troubles) > 0:
-                trouble_dvs = [t['dv'] for t in troubles[:20]]
-                ax2.scatter(range(len(trouble_dvs)), trouble_dvs, color=colors['danger'], 
-                          s=100, label='Trouble Detected', alpha=0.9, zorder=5)
+                trouble_indices = []
+                trouble_dvs = []
+                for trouble in troubles[:30]:  # Show first 30 troubles
+                    # Find closest data point
+                    trouble_time = pd.to_datetime(trouble['timestamp'])
+                    closest_idx = (sample_df['Timestamp'] - trouble_time).abs().idxmin()
+                    if closest_idx in sample_df.index:
+                        idx_in_sample = sample_df.index.get_loc(closest_idx)
+                        trouble_indices.append(idx_in_sample)
+                        trouble_dvs.append(trouble['dv'])
+                
+                if trouble_indices:
+                    ax2.scatter(trouble_indices, trouble_dvs, color=colors['danger'], 
+                              s=120, label='Trouble Detected', alpha=0.9, zorder=5,
+                              edgecolors='white', linewidth=1.5)
             
-            ax2.set_title('DV Values Wave Graph', fontsize=12, fontweight='bold')
-            ax2.set_xlabel('Time')
-            ax2.set_ylabel('DV Value')
-            ax2.legend(loc='upper left')
-            ax2.grid(True, alpha=0.3)
-            plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
+            # Improve graph styling
+            ax2.set_title('DV Values Wave Graph', fontsize=14, fontweight='bold', pad=20)
+            ax2.set_xlabel('Data Points', fontsize=12, fontweight='bold')
+            ax2.set_ylabel('DV Value', fontsize=12, fontweight='bold')
+            ax2.legend(loc='upper right', framealpha=0.9)
+            ax2.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+            
+            # Set better y-axis limits
+            y_min, y_max = dv_values.min(), dv_values.max()
+            y_range = y_max - y_min
+            ax2.set_ylim(y_min - y_range*0.1, y_max + y_range*0.1)
+            
+            # Add some statistics to the plot
+            mean_dv = np.mean(dv_values)
+            std_dv = np.std(dv_values)
+            ax2.axhline(y=mean_dv, color=colors['warning'], linestyle=':', 
+                       alpha=0.7, linewidth=2, label=f'Mean: {mean_dv:.1f}')
+            
+            # Remove x-axis ticks for cleaner look
+            ax2.set_xticks([])
+            
+            # Add text box with statistics
+            stats_text = f'Mean: {mean_dv:.1f}\nStd: {std_dv:.1f}\nPoints: {len(dv_values)}'
+            ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, 
+                    fontsize=10, verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
         
         # 3. Pressure & Temperature Graph
         if len(df) > 0:
             ax3_twin = ax3.twinx()
             
-            line1 = ax3.plot(timestamps, sample_df['Pressure'], 
-                            color=colors['primary'], label='Pressure', linewidth=2, alpha=0.9)
-            line2 = ax3_twin.plot(timestamps, sample_df['Temperature'], 
-                                 color=colors['danger'], label='Temperature', linewidth=2, alpha=0.9)
+            # Use the same sample data as DV graph for consistency
+            pressure_values = sample_df['Pressure'].values
+            temperature_values = sample_df['Temperature'].values
             
-            ax3.set_ylabel('Pressure', color=colors['primary'], fontweight='bold')
-            ax3_twin.set_ylabel('Temperature (°C)', color=colors['danger'], fontweight='bold')
+            # Create more visually appealing plots
+            line1 = ax3.plot(time_indices, pressure_values, 
+                            color=colors['primary'], label='Pressure', 
+                            linewidth=2.5, alpha=0.8, marker='s', markersize=2)
+            line2 = ax3_twin.plot(time_indices, temperature_values, 
+                                 color=colors['danger'], label='Temperature', 
+                                 linewidth=2.5, alpha=0.8, marker='^', markersize=2)
+            
+            # Improve axis styling
+            ax3.set_ylabel('Pressure', color=colors['primary'], fontweight='bold', fontsize=12)
+            ax3_twin.set_ylabel('Temperature (°C)', color=colors['danger'], fontweight='bold', fontsize=12)
             ax3.tick_params(axis='y', labelcolor=colors['primary'])
             ax3_twin.tick_params(axis='y', labelcolor=colors['danger'])
             
-            ax3.set_title('Pressure & Temperature Wave Graph', fontsize=12, fontweight='bold')
-            ax3.set_xlabel('Time')
-            ax3.grid(True, alpha=0.3)
+            # Improve title and styling
+            ax3.set_title('Pressure & Temperature Wave Graph', fontsize=14, fontweight='bold', pad=20)
+            ax3.set_xlabel('Data Points', fontsize=12, fontweight='bold')
+            ax3.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
             
+            # Set better y-axis limits
+            p_min, p_max = pressure_values.min(), pressure_values.max()
+            p_range = p_max - p_min
+            ax3.set_ylim(p_min - p_range*0.1, p_max + p_range*0.1)
+            
+            t_min, t_max = temperature_values.min(), temperature_values.max()
+            t_range = t_max - t_min
+            ax3_twin.set_ylim(t_min - t_range*0.1, t_max + t_range*0.1)
+            
+            # Add mean lines
+            mean_pressure = np.mean(pressure_values)
+            mean_temp = np.mean(temperature_values)
+            ax3.axhline(y=mean_pressure, color=colors['primary'], linestyle=':', 
+                       alpha=0.6, linewidth=2, label=f'P Mean: {mean_pressure:.1f}')
+            ax3_twin.axhline(y=mean_temp, color=colors['danger'], linestyle=':', 
+                            alpha=0.6, linewidth=2, label=f'T Mean: {mean_temp:.1f}')
+            
+            # Combine legends
             lines = line1 + line2
             labels = [l.get_label() for l in lines]
-            ax3.legend(lines, labels, loc='upper left')
-            plt.setp(ax3.get_xticklabels(), rotation=45, ha='right')
+            ax3.legend(lines, labels, loc='upper right', framealpha=0.9)
+            
+            # Remove x-axis ticks for cleaner look
+            ax3.set_xticks([])
+            
+            # Add statistics text box
+            stats_text = f'P Mean: {mean_pressure:.1f}\nT Mean: {mean_temp:.1f}\nPoints: {len(pressure_values)}'
+            ax3.text(0.02, 0.98, stats_text, transform=ax3.transAxes, 
+                    fontsize=10, verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
         
         # 4. Alerts Panel
         if trouble_count == 0:
