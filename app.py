@@ -16,6 +16,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
+import os
+os.environ['MPLCONFIGDIR'] = '/tmp'  # Set matplotlib config directory
 import io
 import base64
 from sklearn.linear_model import LinearRegression
