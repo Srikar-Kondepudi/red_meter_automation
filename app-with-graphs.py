@@ -127,68 +127,82 @@ def create_dashboard_plot(df, troubles):
         
         # 2. DV Wave Graph
         if len(df) > 0:
-            # Sample data for visualization - use more recent data
-            sample_size = min(300, len(df))
+            # Use more data points for better wave visualization
+            sample_size = min(500, len(df))
             sample_df = df.tail(sample_size).sort_values('Timestamp')
             
             # Create proper time indices for x-axis
             time_indices = range(len(sample_df))
             dv_values = sample_df['DV'].values
             
-            # Create a more visually appealing plot
+            # Create smooth wave-like visualization
             ax2.plot(time_indices, dv_values, color=colors['primary'], 
-                    label='DV Values', linewidth=2.5, alpha=0.8, marker='o', markersize=3)
+                    label='DV Wave Pattern', linewidth=2, alpha=0.9)
             
-            # Add trend line for better visualization
-            z = np.polyfit(time_indices, dv_values, 1)
-            p = np.poly1d(z)
-            ax2.plot(time_indices, p(time_indices), color=colors['success'], 
-                    linestyle='--', linewidth=2, alpha=0.6, label='Trend Line')
+            # Add moving average for trend visualization
+            window_size = min(20, len(dv_values) // 10)
+            if window_size > 1:
+                moving_avg = np.convolve(dv_values, np.ones(window_size)/window_size, mode='valid')
+                moving_avg_indices = range(window_size-1, len(dv_values))
+                ax2.plot(moving_avg_indices, moving_avg, color=colors['success'], 
+                        linestyle='--', linewidth=2, alpha=0.7, label='Trend')
             
-            # Highlight trouble points with better styling
+            # Anomaly detection and highlighting
             if len(troubles) > 0:
-                trouble_indices = []
-                trouble_dvs = []
-                for trouble in troubles[:30]:  # Show first 30 troubles
-                    # Find closest data point
-                    trouble_time = pd.to_datetime(trouble['timestamp'])
-                    closest_idx = (sample_df['Timestamp'] - trouble_time).abs().idxmin()
-                    if closest_idx in sample_df.index:
-                        idx_in_sample = sample_df.index.get_loc(closest_idx)
-                        trouble_indices.append(idx_in_sample)
-                        trouble_dvs.append(trouble['dv'])
+                # Find anomalies in the current sample
+                anomaly_indices = []
+                anomaly_values = []
                 
-                if trouble_indices:
-                    ax2.scatter(trouble_indices, trouble_dvs, color=colors['danger'], 
-                              s=120, label='Trouble Detected', alpha=0.9, zorder=5,
-                              edgecolors='white', linewidth=1.5)
+                for trouble in troubles[:50]:  # Check more troubles
+                    trouble_time = pd.to_datetime(trouble['timestamp'])
+                    # Find if this trouble is in our sample
+                    time_diff = abs(sample_df['Timestamp'] - trouble_time)
+                    if time_diff.min() < pd.Timedelta(minutes=5):  # Within 5 minutes
+                        closest_idx = time_diff.idxmin()
+                        if closest_idx in sample_df.index:
+                            idx_in_sample = sample_df.index.get_loc(closest_idx)
+                            anomaly_indices.append(idx_in_sample)
+                            anomaly_values.append(trouble['dv'])
+                
+                # Also detect statistical anomalies
+                mean_dv = np.mean(dv_values)
+                std_dv = np.std(dv_values)
+                statistical_anomalies = np.where(np.abs(dv_values - mean_dv) > 2 * std_dv)[0]
+                
+                # Combine both types of anomalies
+                all_anomaly_indices = list(set(anomaly_indices + statistical_anomalies.tolist()))
+                all_anomaly_values = [dv_values[i] for i in all_anomaly_indices if i < len(dv_values)]
+                
+                if all_anomaly_values:
+                    ax2.scatter(all_anomaly_indices, all_anomaly_values, 
+                              color=colors['danger'], s=150, label='Anomalies Detected', 
+                              alpha=0.9, zorder=5, edgecolors='white', linewidth=2)
             
-            # Improve graph styling
-            ax2.set_title('DV Values Wave Graph', fontsize=14, fontweight='bold', pad=20)
-            ax2.set_xlabel('Data Points', fontsize=12, fontweight='bold')
+            # Improve graph styling for wave visualization
+            ax2.set_title('DV Wave Pattern Analysis', fontsize=14, fontweight='bold', pad=20)
+            ax2.set_xlabel('Time Sequence', fontsize=12, fontweight='bold')
             ax2.set_ylabel('DV Value', fontsize=12, fontweight='bold')
             ax2.legend(loc='upper right', framealpha=0.9)
-            ax2.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+            ax2.grid(True, alpha=0.2, linestyle='-', linewidth=0.5)
             
-            # Set better y-axis limits
+            # Set better y-axis limits for wave visualization
             y_min, y_max = dv_values.min(), dv_values.max()
             y_range = y_max - y_min
-            ax2.set_ylim(y_min - y_range*0.1, y_max + y_range*0.1)
+            ax2.set_ylim(y_min - y_range*0.15, y_max + y_range*0.15)
             
-            # Add some statistics to the plot
-            mean_dv = np.mean(dv_values)
-            std_dv = np.std(dv_values)
-            ax2.axhline(y=mean_dv, color=colors['warning'], linestyle=':', 
-                       alpha=0.7, linewidth=2, label=f'Mean: {mean_dv:.1f}')
+            # Add anomaly statistics
+            if len(troubles) > 0:
+                anomaly_count = len(all_anomaly_indices) if 'all_anomaly_indices' in locals() else 0
+                stats_text = f'Wave Points: {len(dv_values)}\nAnomalies: {anomaly_count}\nMean: {mean_dv:.1f}'
+            else:
+                stats_text = f'Wave Points: {len(dv_values)}\nAnomalies: 0\nMean: {np.mean(dv_values):.1f}'
             
-            # Remove x-axis ticks for cleaner look
-            ax2.set_xticks([])
-            
-            # Add text box with statistics
-            stats_text = f'Mean: {mean_dv:.1f}\nStd: {std_dv:.1f}\nPoints: {len(dv_values)}'
             ax2.text(0.02, 0.98, stats_text, transform=ax2.transAxes, 
                     fontsize=10, verticalalignment='top',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+            
+            # Remove x-axis ticks for cleaner wave look
+            ax2.set_xticks([])
         
         # 3. Pressure & Temperature Graph
         if len(df) > 0:
@@ -198,13 +212,71 @@ def create_dashboard_plot(df, troubles):
             pressure_values = sample_df['Pressure'].values
             temperature_values = sample_df['Temperature'].values
             
-            # Create more visually appealing plots
+            # Create wave-like visualizations
             line1 = ax3.plot(time_indices, pressure_values, 
-                            color=colors['primary'], label='Pressure', 
-                            linewidth=2.5, alpha=0.8, marker='s', markersize=2)
+                            color=colors['primary'], label='Pressure Wave', 
+                            linewidth=2, alpha=0.9)
             line2 = ax3_twin.plot(time_indices, temperature_values, 
-                                 color=colors['danger'], label='Temperature', 
-                                 linewidth=2.5, alpha=0.8, marker='^', markersize=2)
+                                 color=colors['danger'], label='Temperature Wave', 
+                                 linewidth=2, alpha=0.9)
+            
+            # Add moving averages for trend visualization
+            if len(pressure_values) > 10:
+                p_window = min(15, len(pressure_values) // 8)
+                p_moving_avg = np.convolve(pressure_values, np.ones(p_window)/p_window, mode='valid')
+                p_avg_indices = range(p_window-1, len(pressure_values))
+                ax3.plot(p_avg_indices, p_moving_avg, color=colors['primary'], 
+                        linestyle='--', linewidth=1.5, alpha=0.6, label='P Trend')
+            
+            if len(temperature_values) > 10:
+                t_window = min(15, len(temperature_values) // 8)
+                t_moving_avg = np.convolve(temperature_values, np.ones(t_window)/t_window, mode='valid')
+                t_avg_indices = range(t_window-1, len(temperature_values))
+                ax3_twin.plot(t_avg_indices, t_moving_avg, color=colors['danger'], 
+                             linestyle='--', linewidth=1.5, alpha=0.6, label='T Trend')
+            
+            # Anomaly detection for pressure and temperature
+            if len(troubles) > 0:
+                p_anomaly_indices = []
+                t_anomaly_indices = []
+                
+                for trouble in troubles[:50]:
+                    if trouble['trouble_type'] in ['PRESSURE_ISSUE', 'TEMPERATURE_ISSUE']:
+                        trouble_time = pd.to_datetime(trouble['timestamp'])
+                        time_diff = abs(sample_df['Timestamp'] - trouble_time)
+                        if time_diff.min() < pd.Timedelta(minutes=5):
+                            closest_idx = time_diff.idxmin()
+                            if closest_idx in sample_df.index:
+                                idx_in_sample = sample_df.index.get_loc(closest_idx)
+                                if idx_in_sample < len(pressure_values):
+                                    if trouble['trouble_type'] == 'PRESSURE_ISSUE':
+                                        p_anomaly_indices.append(idx_in_sample)
+                                    else:
+                                        t_anomaly_indices.append(idx_in_sample)
+                
+                # Also detect statistical anomalies
+                p_mean, p_std = np.mean(pressure_values), np.std(pressure_values)
+                t_mean, t_std = np.mean(temperature_values), np.std(temperature_values)
+                
+                p_statistical = np.where(np.abs(pressure_values - p_mean) > 2 * p_std)[0]
+                t_statistical = np.where(np.abs(temperature_values - t_mean) > 2 * t_std)[0]
+                
+                # Combine anomalies
+                all_p_anomalies = list(set(p_anomaly_indices + p_statistical.tolist()))
+                all_t_anomalies = list(set(t_anomaly_indices + t_statistical.tolist()))
+                
+                # Plot anomalies
+                if all_p_anomalies:
+                    p_anomaly_values = [pressure_values[i] for i in all_p_anomalies if i < len(pressure_values)]
+                    ax3.scatter(all_p_anomalies, p_anomaly_values, 
+                              color=colors['danger'], s=120, alpha=0.9, zorder=5,
+                              edgecolors='white', linewidth=1.5)
+                
+                if all_t_anomalies:
+                    t_anomaly_values = [temperature_values[i] for i in all_t_anomalies if i < len(temperature_values)]
+                    ax3_twin.scatter(all_t_anomalies, t_anomaly_values, 
+                                   color=colors['danger'], s=120, alpha=0.9, zorder=5,
+                                   edgecolors='white', linewidth=1.5)
             
             # Improve axis styling
             ax3.set_ylabel('Pressure', color=colors['primary'], fontweight='bold', fontsize=12)
@@ -213,37 +285,31 @@ def create_dashboard_plot(df, troubles):
             ax3_twin.tick_params(axis='y', labelcolor=colors['danger'])
             
             # Improve title and styling
-            ax3.set_title('Pressure & Temperature Wave Graph', fontsize=14, fontweight='bold', pad=20)
-            ax3.set_xlabel('Data Points', fontsize=12, fontweight='bold')
-            ax3.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+            ax3.set_title('Pressure & Temperature Wave Analysis', fontsize=14, fontweight='bold', pad=20)
+            ax3.set_xlabel('Time Sequence', fontsize=12, fontweight='bold')
+            ax3.grid(True, alpha=0.2, linestyle='-', linewidth=0.5)
             
-            # Set better y-axis limits
+            # Set better y-axis limits for wave visualization
             p_min, p_max = pressure_values.min(), pressure_values.max()
             p_range = p_max - p_min
-            ax3.set_ylim(p_min - p_range*0.1, p_max + p_range*0.1)
+            ax3.set_ylim(p_min - p_range*0.15, p_max + p_range*0.15)
             
             t_min, t_max = temperature_values.min(), temperature_values.max()
             t_range = t_max - t_min
-            ax3_twin.set_ylim(t_min - t_range*0.1, t_max + t_range*0.1)
-            
-            # Add mean lines
-            mean_pressure = np.mean(pressure_values)
-            mean_temp = np.mean(temperature_values)
-            ax3.axhline(y=mean_pressure, color=colors['primary'], linestyle=':', 
-                       alpha=0.6, linewidth=2, label=f'P Mean: {mean_pressure:.1f}')
-            ax3_twin.axhline(y=mean_temp, color=colors['danger'], linestyle=':', 
-                            alpha=0.6, linewidth=2, label=f'T Mean: {mean_temp:.1f}')
+            ax3_twin.set_ylim(t_min - t_range*0.15, t_max + t_range*0.15)
             
             # Combine legends
             lines = line1 + line2
             labels = [l.get_label() for l in lines]
             ax3.legend(lines, labels, loc='upper right', framealpha=0.9)
             
-            # Remove x-axis ticks for cleaner look
+            # Remove x-axis ticks for cleaner wave look
             ax3.set_xticks([])
             
-            # Add statistics text box
-            stats_text = f'P Mean: {mean_pressure:.1f}\nT Mean: {mean_temp:.1f}\nPoints: {len(pressure_values)}'
+            # Add anomaly statistics
+            p_anomaly_count = len(all_p_anomalies) if 'all_p_anomalies' in locals() else 0
+            t_anomaly_count = len(all_t_anomalies) if 'all_t_anomalies' in locals() else 0
+            stats_text = f'P Anomalies: {p_anomaly_count}\nT Anomalies: {t_anomaly_count}\nWave Points: {len(pressure_values)}'
             ax3.text(0.02, 0.98, stats_text, transform=ax3.transAxes, 
                     fontsize=10, verticalalignment='top',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
