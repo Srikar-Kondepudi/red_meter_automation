@@ -2,18 +2,17 @@
   "version": 2,
   "builds": [
     {
-      "src": "app-with-graphs.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "15mb",
-        "runtime": "python3.12"
-      }
+      "src": "production-app.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "app-with-graphs.py"
+      "dest": "production-app.py"
     }
-  ]
+  ],
+  "env": {
+    "PYTHONPATH": "."
+  }
 } 
