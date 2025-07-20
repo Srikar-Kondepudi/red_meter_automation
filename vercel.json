@@ -2,14 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "production-app.py",
+      "src": "simple-working-app.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "production-app.py"
+      "dest": "simple-working-app.py"
     }
   ],
   "env": {
